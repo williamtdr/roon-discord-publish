@@ -127,8 +127,8 @@ async function setActivity(line1, line2, songLength, currentSeek, zoneName) {
     }
 
     _rpc.setActivity({
-        details: line1.substring(0, 50),
-        state: line2.substring(0, 50),
+        details: line1.substring(0, 128),
+        state: line2.substring(0, 128),
         startTimestamp,
         endTimestamp,
         largeImageKey: 'roon-main',
@@ -172,7 +172,7 @@ const roon = new RoonApi({
     display_name: 'Discord Rich Presence',
     display_version: '1.0',
     publisher: 'William Teder',
-    email: 'wteder@hydreon.com',
+    email: 'twitter@williamtdr',
     website: 'https://tdr.moe',
 
     core_paired: core => {
