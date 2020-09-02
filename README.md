@@ -9,3 +9,4 @@ Based on an [implementation](https://github.com/jamesxsc/roon-discord-rp) by 615
 - auto shutdown
 - block on Discord connection on startup
 - some rate limiting
+- remove electron dependency, among others
