@@ -17,28 +17,13 @@ limitations under the License.
 'use strict';
 
 const RoonApi = require('node-roon-api'),
-      RoonApiTransport = require('node-roon-api-transport'),
-      DiscordRPC = require('discord-rpc');
+    RoonApiTransport = require('node-roon-api-transport'),
+    DiscordRPC = require('discord-rpc');
 
 let _core, _transport, _rpc;
 let reconnectionTimer, discordConnected = false, roonConnected = false, lastSentStatus = 0;
 
-const settings = {
-    discord: {
-        clientId: '464873958232162353',
-        // const scopes = ['rpc', 'activities.write'];
-    },
-    zone: {
-        zone_id: '1601563aef66097db5cf42339fd8d2051a33'
-    },
-    core: {
-        ip: "192.168.0.200"
-    },
-    app: {
-        auto_shutdown: false,
-        use_discovery: false
-    }
-};
+const settings = require('./config.json');
 
 function scheduleReconnection() {
     clearTimeout(reconnectionTimer);
@@ -48,7 +33,7 @@ function scheduleReconnection() {
 async function connectToDiscord() {
     console.log("Connecting to Discord...");
 
-    if(_rpc && _rpc.transport.socket && _rpc.transport.socket.readyState === 1) {
+    if (_rpc && _rpc.transport.socket && _rpc.transport.socket.readyState === 1) {
         await _rpc.destroy();
     }
 
@@ -60,14 +45,14 @@ async function connectToDiscord() {
         discordConnected = true;
         clearTimeout(reconnectionTimer);
 
-        if(!roonConnected) {
+        if (!roonConnected) {
             console.log("Connecting to Roon...");
 
-            if(settings.app.use_discovery) {
+            if (settings.app.use_discovery) {
                 roon.start_discovery();
             } else {
                 roon.ws_connect({
-                    host: settings.core.ip,
+                    host: settings.core_ip,
                     port: "9100"
                 });
             }
@@ -88,7 +73,7 @@ async function connectToDiscord() {
         // (syn): by sending `scopes`, the client constantly prompts for auth.
         // seems to work fine without it.
         await _rpc.login({ clientId: settings.discord.clientId });
-    } catch(e) {
+    } catch (e) {
         console.error(e);
 
         scheduleReconnection();
@@ -96,23 +81,17 @@ async function connectToDiscord() {
 }
 
 function setStatusForZone(zone) {
-    if(!discordConnected) return;
+    if (!discordConnected) return;
 
-    if(zone.state === 'stopped') {
+    if (zone.state === 'stopped') {
         setActivityStopped();
-    } else if(zone.state === 'paused') {
+    } else if (zone.state === 'paused') {
         setActivityPaused(zone.now_playing.two_line.line1, zone.now_playing.two_line.line2, zone.display_name);
-    } else if(zone.state === 'loading') {
+    } else if (zone.state === 'loading') {
         setActivityLoading(zone.display_name);
-    } else if(zone.state === 'playing') {
+    } else if (zone.state === 'playing') {
         setActivity(zone.now_playing.two_line.line1, zone.now_playing.two_line.line2, zone.now_playing.length, zone.now_playing.seek_position, zone.display_name);
     }
-}
-
-async function setActivityClosed() {
-    if(!discordConnected) return;
-
-    _rpc.clearActivity();
 }
 
 async function setActivity(line1, line2, songLength, currentSeek, zoneName) {
@@ -120,7 +99,7 @@ async function setActivity(line1, line2, songLength, currentSeek, zoneName) {
     const endTimestamp = Math.round(startTimestamp + songLength);
 
     // rate limit a bit...
-    if(Date.now() - lastSentStatus < 1000 * 10) {
+    if (Date.now() - lastSentStatus < 1000 * 10) {
         return;
     } else {
         lastSentStatus = Date.now();
@@ -161,7 +140,7 @@ async function setActivityStopped() {
 
 DiscordRPC.register(settings.discord.clientId);
 
-if(settings.app.auto_shutdown) {
+if (settings.app.auto_shutdown) {
     setTimeout(() => {
         process.exit(0);
     }, 1000 * 60 * 30);
@@ -179,21 +158,42 @@ const roon = new RoonApi({
         _core = core;
         _transport = _core.services.RoonApiTransport;
 
+        let activeZone = null
         _transport.subscribe_zones((cmd, data) => {
-            const zoneOfInterest = _transport._zones[settings.zone.zone_id];
-
-            if(!zoneOfInterest) {
-                console.log("The zone we're looking for hasn't come online yet, waiting.");
+            if (settings.zone_id) {
+                activeZone = _transport._zones[settings.zone_id];
             }
 
-            if(cmd === 'Changed') {
-                if(data.zones_removed) {
+            // We have no zone, set it to the latest "playing"
+            // zone.
+            if (activeZone === null) {
+                for (const zoneID of Object.keys(_transport._zones)) {
+                    const zone = _transport._zones[zoneID]
+                    if (zone.state === 'playing') {
+                        activeZone = zone
+                        break
+                    }
+                }
+
+                if (activeZone === null) {
+                    console.warn("Failed to find an active zone")
+                    return
+                }
+
+                console.log("Active zone changed:", activeZone.zone_id, activeZone.display_name)
+            }
+
+            if (cmd === 'Changed') {
+                if (data.zones_removed) {
                     setActivityStopped();
                 } else {
-                    setStatusForZone(zoneOfInterest);
+                    setStatusForZone(_transport._zones[activeZone.zone_id]);
                 }
-            } else {
-                console.log(cmd);
+            }
+
+            if (activeZone.state !== 'playing') {
+                console.log("Active zone stopped, resetting")
+                activeZone = null
             }
         });
     },

@@ -1,0 +1,15 @@
+{
+  // Optional: IP of your Roon instance
+  "core_ip": "",
+  // Optional: ID of the zoon to filter out
+  "zone_id": "",
+  // Discord app information
+  "discord": {
+    "clientId": "464873958232162353"
+  },
+  // App configuration
+  "app": {
+    "auto_shutdown": false,
+    "use_discovery": true
+  }
+}
